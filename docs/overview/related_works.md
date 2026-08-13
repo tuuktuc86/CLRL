@@ -200,5 +200,5 @@ link-citations: true
 
 ## 조사 메모
 
-- [[research/continual_rl_taxonomy|Continual RL Taxonomy Notes]]
-- [[research/morphology_cross_embodiment_taxonomy|Morphology-Aware / Cross-Embodiment Taxonomy Note]]
+- [[related_works_research/continual_rl_taxonomy|Continual RL 분류 조사 메모]]
+- [[related_works_research/morphology_cross_embodiment_taxonomy|Morphology-Aware / Cross-Embodiment 분류 조사 메모]]

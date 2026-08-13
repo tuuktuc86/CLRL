@@ -37,7 +37,7 @@ Continual reinforcement learning은 RL 학습 대상이 순차적으로 변하�
 
 ## Morphology는 선택적 지식 재사용을 위한 structural prior가 될 수 있다
 
-서로 다른 embodiment의 전체 state/action dimension이 달라도 각 robot은 joint와 link의 구성, 연결 관계, 물리적 특성이라는 구조를 가진다. 이러한 morphology 정보는 과거에 획득한 지식 중 새로운 embodiment에서도 재사용할 부분과 이전 embodiment의 성능을 위해 보존할 부분을 구분하는 단서가 될 수 있다. 이 구분이 가능하다면 새로운 embodiment를 학습하기 위해 모든 shared representation을 동일하게 수정할 필요가 없다.
+서로 다른 embodiment의 전체 state/action dimension이 달라도 각 robot은 joint와 link의 구성, 연결 관계, geometry와 물리적 특성으로 이루어진 morphology를 가진다. 이 중 [[overview/glossary#Topology|topology]]는 어떤 body component가 서로 연결되는지를 나타내는 구조적 하위 요소다. 이러한 morphology 정보, 특히 topology는 과거에 획득한 지식 중 새로운 embodiment에서도 재사용할 부분과 이전 embodiment의 성능을 위해 보존할 부분을 구분하는 단서가 될 수 있다. 이 구분이 가능하다면 새로운 embodiment를 학습하기 위해 모든 shared representation을 동일하게 수정할 필요가 없다.
 
 ## 본 연구는 control knowledge의 지속적인 축적과 재사용을 목표로 한다
 

@@ -43,18 +43,7 @@ link-citations: true
 - Preprocessing report: `processed/PREPROCESSING_REPORT.md`
 - Loader: `scripts/clrl_loader.py`
 
-## 2. Relevance to This Research
-
-이 dataset은 동일한 locomotion 목적을 수행하는 여러 [[overview/glossary#Embodiment|embodiment]]의 offline experience를 제공한다. 각 robot의 joint/foot 수와 native observation/action dimension이 다르므로, 다음 문제를 검토하는 데 적합하다.
-
-1. 서로 다른 embodiment 사이에서 공유 가능한 control knowledge가 존재하는가?
-2. [[overview/glossary#Morphology|morphology]] 정보가 heterogeneous observation/action interface의 정렬에 도움이 되는가?
-3. robot을 순차적으로 학습할 때 [[overview/glossary#Forward Transfer|forward transfer]]와 [[overview/glossary#Catastrophic Forgetting|catastrophic forgetting]]이 어떻게 나타나는가?
-4. Transition sampling, episode imbalance, reward scale 차이가 [[overview/glossary#Stability–Plasticity Trade-off|stability–plasticity trade-off]] 평가에 어떤 영향을 주는가?
-
-다만 원본 dataset은 모든 robot data를 함께 사용하는 pooled offline RL을 위해 구성되었다. 따라서 [[overview/glossary#Cross-Embodiment Continual Reinforcement Learning|Cross-Embodiment Continual Reinforcement Learning]] 실험에 사용하려면 robot 순서, 과거 data 접근 범위, replay 허용량을 별도로 정의해야 한다.
-
-## 3. Raw Data Format
+## 2. Raw Data Format
 
 Raw dataset은 다음 일곱 개 `.npy` array와 metadata로 구성된다.
 
@@ -69,11 +58,26 @@ truncateds.npy         (1000000, 16,   1)  float32
 metadata.json          {"n_samples": 1000000, "n_envs": 16}
 ```
 
-- `axis 0`: timestep
-- `axis 1`: environment slot 또는 robot
-- `axis 2`: feature
+- `axis 0`: vectorized environment의 공통 step index
+- `axis 1`: 고정된 environment slot
+- `axis 2`: observation 또는 action feature
 
-Environment slot 하나가 robot 하나의 1,000,000-step chronological stream에 대응하므로 interleaving을 해제할 필요가 없다.
+### 2.1 Axis 1: Environment Slot
+
+여기서 environment는 하나의 robot과 그 robot의 MuJoCo state를 포함하는 독립적인 simulator instance를 뜻한다. Data collection에서는 16개의 environment를 병렬로 실행했고, 각 environment slot에 서로 다른 robot type 하나를 고정적으로 배정했다.
+
+따라서 이 dataset에서는 `axis 1`이 사실상 robot identity와 일대일로 대응한다.
+
+```text
+observations[t, 0, :]   = vectorized step t에서 unitree_a1의 observation
+observations[t, 1, :]   = vectorized step t에서 unitree_go1의 observation
+...
+observations[t, 15, :]  = vectorized step t에서 hexapod의 observation
+```
+
+즉 shape의 `16`은 16종의 robot이 각각 하나의 environment slot에 들어 있기 때문에 생긴다. 일반적인 vectorized environment에서 slot은 반드시 robot type을 뜻하지 않지만, 이 dataset의 수집 configuration에서는 `slot index = robot index`다.
+
+각 slot은 episode가 끝나면 같은 robot으로 reset된 뒤 stream을 이어간다. 따라서 `axis 1`은 episode index가 아니며, slot `e`를 선택하면 robot `e`의 1,000,000-step chronological stream을 얻는다. Robot transition이 서로 섞여 있지 않으므로 별도의 de-interleaving은 필요하지 않다.
 
 Robot마다 joint와 foot 수가 다르기 때문에 observation은 최대 `668`, action은 최대 `24`까지 뒤쪽이 `0.0`으로 padding되어 있다. Reference에서는 전체 16,000,000 transition에 대해 padding이 정확히 `0.0`임을 확인했다.
 
@@ -87,7 +91,7 @@ Robot마다 joint와 foot 수가 다르기 때문에 observation은 최대 `668`
 
 NaN과 Inf는 발견되지 않았다.
 
-## 4. Robot Roster
+## 3. Robot Roster
 
 Environment slot 순서는 upstream `multi_robot/default_config.py::train_robot_types`를 따른다. `robot_helper.py`의 `ROBOTS` 순서와 혼동하면 안 된다.
 
@@ -112,7 +116,7 @@ Environment slot 순서는 upstream `multi_robot/default_config.py::train_robot_
 
 `talos`가 가장 넓은 observation/action interface를 가지며 padding width `668/24`를 결정한다.
 
-## 5. Observation Layout
+## 4. Observation Layout
 
 Robot의 native observation dimension은 다음 식을 따른다.
 
@@ -130,7 +134,7 @@ native_obs_dim = 26 * number_of_joints + 12 * number_of_feet + 20
 [ zero padding ]                             to 668
 ```
 
-### 5.1 Joint Block
+### 4.1 Joint Block
 
 각 joint block은 descriptor 23차원과 dynamic state 3차원으로 구성된다.
 
@@ -154,7 +158,7 @@ native_obs_dim = 26 * number_of_joints + 12 * number_of_feet + 20
 | 24 | joint velocity |
 | 25 | previous action |
 
-### 5.2 Foot Block
+### 4.2 Foot Block
 
 각 foot block은 descriptor 10차원과 dynamic state 2차원으로 구성된다.
 
@@ -167,7 +171,7 @@ native_obs_dim = 26 * number_of_joints + 12 * number_of_feet + 20
 | 10 | ground contact |
 | 11 | time since last ground contact |
 
-### 5.3 Global State and Robot Context
+### 4.3 Global State and Robot Context
 
 `general dynamic state` 13차원은 다음 값으로 구성된다.
 
@@ -179,9 +183,31 @@ native_obs_dim = 26 * number_of_joints + 12 * number_of_feet + 20
 
 `robot context` 7차원은 P gain, D gain, action scaling factor, mass, length, width, height다. 같은 7개 값이 모든 joint descriptor와 foot descriptor의 마지막 부분에도 반복되므로 observation에는 의도적인 redundancy가 있다.
 
-## 6. Applied Observation Scaling
+### 4.4 3D Reconstruction 범위
 
-Observation은 저장 전에 이미 scaling되었다. 따라서 preprocessing 단계에서 다시 normalization하지 않는 것을 기본 원칙으로 둔다.
+**실제 observation에 저장된 morphology descriptor와 topology 정보가 있으면 robot의 static 3D morphology skeleton을 복원할 수 있다.** Joint descriptor `0–2`와 foot descriptor `0–2`의 trunk-frame relative position을 원래 physical scale로 되돌리고, `topology.npz::parent_idx`를 이용해 landmark를 연결하면 된다.
+
+아래 그림은 stored observation에서 복원한 landmark와 MuJoCo model의 ground-truth landmark를 비교한 예시다. 파란 점과 선은 observation에서 복원한 morphology, 속이 빈 빨간 표식은 MuJoCo ground truth, 회색 막대는 joint axis, 삼각형은 foot을 나타낸다. 이 예시에서는 `go1`, `go2`, `anymal_c`, `hexapod`, `h1`의 static skeleton이 ground truth와 거의 정확히 일치한다.
+
+![Stored observation에서 복원한 robot별 static 3D morphology skeleton](./assets/recon3d_static_skeleton.png)
+
+다만 **문서에 적힌 observation layout만으로 즉시 복원할 수 있다는 뜻은 아니다.** 실제 coordinate 값, descriptor scaling의 역변환과 parent-child connectivity가 함께 필요하다.
+
+실제 observation row가 있으면 다음 수준의 표현은 가능하다.
+
+| 사용 정보 | 가능한 표현 |
+|---|---|
+| 실제 morphology descriptor의 joint/foot position | trunk frame 기준 3D landmark point cloud |
+| 위 좌표의 scale 역변환 + `topology.npz::parent_idx` | static 3D morphology skeleton |
+| MJCF model + dynamic joint position + forward kinematics | 현재 articulated pose와 link geometry |
+
+Flattened raw observation만 사용할 경우에는 각 joint의 direct child 수만 알 수 있고 어느 joint가 child인지는 알 수 없다. 따라서 landmark 위치는 복원할 수 있지만 올바른 edge를 연결하려면 별도의 topology가 필요하다. 또한 descriptor coordinate는 normalized value이므로 meter 단위로 복원하려면 upstream scaling 정의를 역으로 적용해야 한다.
+
+현재 repository에는 raw/processed array, `topology.npz`와 MJCF model이 포함되어 있지 않으므로 이 repository만으로 reconstruction code를 다시 실행하거나 다른 sample을 복원할 수는 없다. Dataset과 morphology metadata를 연결하면 위 그림처럼 static skeleton을 생성할 수 있다. 현재 자세까지 포함한 articulated reconstruction이나 link mesh rendering은 별도로 MJCF model과 forward kinematics가 필요하다.
+
+## 5. Applied Observation Scaling
+
+Observation은 저장 전에 이미 다음 scaling이 적용된 상태다.
 
 ```text
 joint position          / 4.6
@@ -194,9 +220,9 @@ trunk angular velocity  / 50, clipped to [-1, 1]
 height                  / robot_height - 1, clipped to [-1, 1]
 ```
 
-Per-robot z-normalization은 descriptor가 전달하는 cross-embodiment scale 정보를 제거할 수 있다. 추가 normalization이 필요하면 algorithm-level option으로 분리하고 ablation해야 한다.
+추가 normalization은 원본 dataset에 적용된 처리가 아니며, 특히 per-robot z-normalization은 descriptor에 남아 있는 robot 사이의 scale 차이를 제거한다.
 
-## 7. Episode Statistics
+## 6. Episode Statistics
 
 Episode은 최대 1,000 step이며 fall 또는 특정 body collision이 발생하면 일찍 종료된다.
 
@@ -219,19 +245,19 @@ Episode은 최대 1,000 step이며 fall 또는 특정 body collision이 발생�
 | `cassie` | 6,693 | 149.4 | 13 | 1000 | 93.7 | 0.0451 | 6.73 |
 | `hexapod` | 1,002 | 998.0 | 14 | 1000 | 0.4 | 0.0443 | 44.18 |
 
-### Experiment Implications
+### Sampling-Related Properties
 
 - 모든 robot은 transition 기준으로 1,000,000개를 가지지만 episode 길이와 episode 수는 크게 다르다.
 - `hexapod`의 termination rate는 `0.4%`인 반면 `cassie`는 `93.7%`다.
 - Uniform transition sampling과 uniform episode sampling은 서로 다른 training distribution을 만든다.
 - Reward는 per-step 기준으로 작고 robot별 mean return 차이가 약 7배다.
-- Reward normalization은 preprocessing에 고정하지 않고 명시적인 실험 조건으로 둔다.
+- 원본 및 processed reward에는 robot별 normalization이 적용되지 않았다.
 
-## 8. Observation Corruption and Domain Randomization
+## 7. Observation Corruption and Domain Randomization
 
 Stored observation은 clean simulator state가 아니다. Collection 과정에서 dropout, observation noise, action delay, physics randomization이 적용되었다.
 
-### 8.1 Observation Dropout
+### 7.1 Observation Dropout
 
 각 step에서 joint와 foot별 독립 mask가 적용되고 선택된 dynamic field가 `0.0`으로 대체된다.
 
@@ -250,7 +276,7 @@ Stored observation은 clean simulator state가 아니다. Collection 과정에�
 
 Dropout mask는 저장되지 않았다. 따라서 해당 dynamic field의 `0.0`은 실제 값과 missing value를 구분할 수 없다. 예를 들어 12-joint quadruped에서는 한 step에 최소 하나의 joint가 dropout될 확률이 약 `46%`다.
 
-### 8.2 Observation Noise
+### 7.2 Observation Noise
 
 다음 uniform noise가 scaling 전에 추가된다.
 
@@ -263,7 +289,7 @@ Dropout mask는 저장되지 않았다. 따라서 해당 dynamic field의 `0.0`�
 
 `previous_action`과 foot field에는 noise가 없고 dropout만 적용된다.
 
-### 8.3 Action Delay and Previous Action
+### 7.3 Action Delay and Previous Action
 
 `DefaultActionDelay`의 `max_nr_delay_steps=1`이다. Domain-randomization sample마다 `mixed_chance`가 결정되며, 활성화된 동안 각 step에는 `action[t]` 또는 `action[t-1]`이 적용된다.
 
@@ -272,13 +298,13 @@ Dropout mask는 저장되지 않았다. 따라서 해당 dynamic field의 `0.0`�
 
 Dropout과 action delay 때문에 `previous_action`은 `actions`로 정확히 재구성할 수 없다. 따라서 processed dataset에서도 별도로 보존해야 한다.
 
-### 8.4 Mid-Episode Physics Randomization
+### 7.4 Mid-Episode Physics Randomization
 
 Mass, gain, torque limit, damping, armature, stiffness, friction loss, joint range가 episode 중에도 다시 sampling되며 descriptor vector도 함께 갱신된다. Reference에서는 robot별 1,000,000 step 동안 약 2,700–4,600개의 morphology segment가 관찰되었다.
 
 따라서 morphology descriptor를 robot마다 하나의 고정 vector로 취급하는 것은 dataset의 실제 생성 과정을 단순화한 approximation이다.
 
-## 9. Processed Data Format
+## 8. Processed Data Format
 
 Reference의 processed representation은 robot별 directory와 memory-mapped `.npy` array를 사용한다.
 
@@ -311,15 +337,15 @@ processed/
 
 여기서 모든 robot에 대해 `N=1,000,000`이다.
 
-### 9.1 Morphology Change-Point Encoding
+### 8.1 Morphology Change-Point Encoding
 
 `morphology_segments.npz`는 morphology descriptor가 바뀌는 지점만 저장한다. Segment `k`는 `[segment_start[k], segment_start[k+1])` 범위를 나타낸다. 연속 step의 약 `99.6%`에서 descriptor가 유지되므로 1,000,000개의 vector 대신 약 2,700–4,600개의 segment만 저장한다.
 
-### 9.2 Next-Observation Exception Encoding
+### 8.2 Next-Observation Exception Encoding
 
 대부분의 transition에서 `next_obs[t] == obs[t+1]`이므로 terminal, 마지막 step, 실제 mismatch row만 exception으로 저장한다. Reference에서는 exact equality를 사용하여 bit-exact reconstruction을 검증했다.
 
-### 9.3 Done Reconstruction
+### 8.3 Done Reconstruction
 
 전체 transition에서 다음 관계가 검증되어 `dones`는 processed data에 중복 저장하지 않는다.
 
@@ -327,7 +353,7 @@ processed/
 dones == terminateds | truncateds
 ```
 
-### 9.4 Kinematic Topology
+### 8.4 Kinematic Topology
 
 `topology.npz`는 trunk, joint, foot을 하나의 graph로 표현한다.
 
@@ -341,51 +367,3 @@ topology["foot_names"]
 ```
 
 `parent_idx`는 MJCF kinematic tree를 따른다. Flattened observation 자체에는 adjacency가 없으므로 connectivity가 필요하면 `topology.npz`를 사용해야 한다.
-
-## 10. Current Usage Principles
-
-현재 단계에서는 다음을 기본 원칙으로 둔다.
-
-1. Raw observation을 다시 normalization하지 않는다.
-2. Reward normalization은 preprocessing에 고정하지 않고 algorithm-level option으로 둔다.
-3. Dynamic field의 정확한 `0.0`은 genuine zero와 dropout을 구분할 수 없는 값으로 취급한다.
-4. `previous_action`을 `actions.npy`로 재구성하지 않는다.
-5. Morphology descriptor가 robot이나 episode마다 고정되어 있다고 가정하지 않는다.
-6. Kinematic connectivity는 observation vector에서 추론하지 않고 `topology.npz`를 사용한다.
-7. Raw `observations`와 `next_observations`는 각각 약 42.75 GB이므로 processed copy 또는 `mmap_mode="r"`를 사용한다.
-8. Chronological storage order는 유지하되 training sampler의 순서는 독립적으로 정의한다.
-
-## 11. Decisions to Revisit
-
-다음 항목은 실험 설계를 구체화하면서 결정한다.
-
-- [ ] 16개 robot을 모두 사용할지, morphology family별 subset부터 사용할지
-- [ ] Continual sequence에서 사용할 robot 순서와 sequence 수
-- [ ] 과거 robot data에 대한 접근을 완전히 차단할지, 제한된 replay를 허용할지
-- [ ] Transition-balanced sampling과 episode-balanced sampling 중 어떤 것을 기본값으로 둘지
-- [ ] Robot별 reward scale을 그대로 사용할지, normalization 또는 return-based scaling을 적용할지
-- [ ] Dropout으로 의심되는 exact zero를 별도 missing value로 처리할지
-- [ ] Dynamic morphology segment를 그대로 사용할지, nominal/static morphology를 별도로 구성할지
-- [ ] Commanded action과 applied previous action을 model input 및 target에서 어떻게 구분할지
-- [ ] `terminated`와 `truncated`를 bootstrap target에서 어떻게 처리할지
-- [ ] Raw/processed dataset과 preprocessing scripts를 repository 외부의 어느 경로에 둘지
-- [ ] Dataset checksum과 preprocessing version을 어떤 방식으로 기록할지
-
-초기 실험 계획은 [[experiments/experiments_1/Round1_experiments|Round 1 Experiments]], 연구 배경은 [[overview/motivation|Motivation]], 관련 방법은 [[overview/related_works|Related Works]]에서 연결한다.
-
-## 12. Provenance and Validation Reported by the Reference
-
-Reference에는 preprocessing 과정이 다음 순서로 기록되어 있다.
-
-| script | role |
-|---|---|
-| `01_layout_probe.py` | environment slot별 `(J, F)` 확인 |
-| `02_inspect.py` | raw array statistics 생성 |
-| `03_extract_robot_defs.py` | joint/foot name과 MJCF topology 추출 |
-| `04_analyze.py` | padding, descriptor variance, `dones`, `next_obs`, `previous_action` 분석 |
-| `05_write_processed.py` | robot별 lossless processed dataset 생성 |
-| `06_roundtrip_validate.py` | raw array와 reconstruction 비교 |
-| `07_report.py` | preprocessing report와 robot mapping 생성 |
-| `clrl_loader.py` | dataset loader |
-
-약 330,000개 transition에 대해 raw observation을 bit-exact하게 재구성했다고 보고되어 있다. 검증 대상에는 `t=0`, `t=N-1`, terminal step, morphology segment boundary, exception row가 포함된다. 이 결과는 reference의 보고이며, dataset을 실제 실험 환경에 연결한 뒤 재검증한다.

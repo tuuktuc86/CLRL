@@ -27,6 +27,10 @@ status: living
 
 이후 embodiment에서의 학습이 이전 embodiment에서 학습한 지식 또는 성능에 미치는 시간 방향의 transfer를 말한다. 영향이 유익한지 해로운지는 이 용어 자체에 포함하지 않는다.
 
+## Canonical Morphology Distance
+
+각 robot의 nominal simulator configuration에서 고정한 [[#Topology|Topology]]와 [[#Morphology|Morphology]] descriptor를 이용해 두 embodiment의 구조적·물리적 차이를 나타내는 거리다. Dataset collection 중 randomization되는 morphology variation 전체의 거리를 뜻하지 않으며, 이 연구에서는 embodiment pair의 구조적 관계를 설명하는 보조 변수로 사용한다.
+
 ## Catastrophic Forgetting
 
 새로운 embodiment를 학습하는 과정에서 이전 embodiment에서 획득한 지식 또는 성능이 현저히 손실되는 현상이다.
@@ -57,6 +61,12 @@ Cross-Embodiment Learning 중 RL experience, value function 또는 policy를 여
 
 _Avoid_: Morphology와 동의어로 사용
 
+## Embodiment-Incremental Continual Reinforcement Learning
+
+서로 다른 embodiment가 학습 stage에 따라 순차적으로 등장하는 [[#Cross-Embodiment Continual Reinforcement Learning|Cross-Embodiment Continual Reinforcement Learning]] protocol이다. 각 stage에서 locomotion objective가 반드시 바뀌는 것은 아니며, stage boundary와 embodiment identity의 제공 여부는 실험 조건으로 별도 명시한다.
+
+_Avoid_: Embodiment 자체가 바뀌었다는 이유만으로 locomotion objective도 다른 task라고 표현
+
 ## Fine-Tuning
 
 pre-trained model을 초기값으로 사용하여 target task, domain 또는 embodiment의 data와 objective로 parameter 일부 또는 전체를 추가 학습하는 절차다. [[#Adaptation|Adaptation]]에 사용할 수 있지만, 그 자체가 [[#Continual Learning|Continual Learning]]이나 [[#Meta-Learning|Meta-Learning]]을 뜻하지 않는다.
@@ -71,13 +81,17 @@ pre-trained model을 초기값으로 사용하여 target task, domain 또는 emb
 
 ## Morphology
 
-이 연구에서 embodiment를 구성하는 robot 고유의 구조적·물리적 속성이다. kinematic topology, DoF, link/joint geometry, mass/inertia, joint limits, actuator limits 등을 포함하며 terrain, environment friction, reward, target velocity는 포함하지 않는다.
+이 연구에서 embodiment를 구성하는 robot 고유의 구조적·물리적 속성 전체다. [[#Topology|Topology]], DoF, link/joint geometry, joint axis와 range, mass/inertia, actuator limit과 control-related physical property 등을 포함한다. Terrain, environment friction, reward와 target velocity는 포함하지 않는다.
+
+Topology는 Morphology의 구조적 하위 요소다. 같은 connectivity를 가진 두 robot도 link length, mass 또는 actuator property가 다르면 같은 Topology를 공유하면서 서로 다른 Morphology를 가질 수 있다.
 
 _Avoid_: Embodiment와 동의어로 사용
 
 ## Morphology-Aware Policy Learning
 
 morphology를 policy의 입력으로 제공하거나 policy architecture에 명시적으로 반영하는 학습 접근이다. 그 자체로 multi-embodiment learning이나 Continual Learning을 뜻하지는 않는다.
+
+Topology-aware policy learning은 connectivity를 명시적으로 사용하는 Morphology-Aware Policy Learning의 하위 경우다. 반대로 morphology descriptor를 사용한다는 사실만으로 topology-aware라고 부르지는 않는다.
 
 ## Plasticity
 
@@ -96,3 +110,13 @@ _Avoid_: Continual Learning과 동의어로 사용
 ## Stability–Plasticity Trade-off
 
 새로운 embodiment를 학습하고 통합하는 [[#Plasticity|plasticity]]와 이전 embodiment에서 획득한 제어 능력을 보존하는 [[#Stability|stability]] 사이의 균형 문제다.
+
+## Topology
+
+Robot을 구성하는 body component와 그 연결 관계를 나타내는 [[#Morphology|Morphology]]의 구조적 하위 요소다. 이 연구에서는 주로 torso, joint와 foot을 node로 하고 kinematic parent–child relation을 edge로 하는 graph를 뜻한다. Node/edge의 수와 type, 어떤 component가 서로 연결되는지는 포함하지만, 정확한 relative position, link length, mass/inertia, joint range와 actuator limit의 값은 포함하지 않는다.
+
+예를 들어 동일한 torso–leg connectivity를 가진 두 quadruped는 같은 Topology를 공유하면서 link 길이와 mass가 다른 Morphology를 가질 수 있다. 반면 quadruped와 biped처럼 component 수나 kinematic connectivity가 다르면 Topology와 Morphology가 모두 다르다.
+
+이 프로젝트에서 `topology-aware`라고 하려면 adjacency, parent index 또는 이에 준하는 connectivity가 representation, parameter selection이나 knowledge consolidation에 직접 사용되어야 한다. Joint/foot descriptor를 독립적으로 처리하거나 relative position만 사용하는 것은 morphology-conditioned일 수 있지만 topology-aware라고 부르지 않는다.
+
+_Avoid_: Morphology와 동의어로 사용; geometry나 physical parameter 전체를 Topology라고 표현
