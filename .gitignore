@@ -1,0 +1,9 @@
+# Local agent and orchestration files
+/.agent/
+/.agents/
+/.codex/
+/.omc/
+/.omx/
+
+# Legacy documentation retained locally
+/docs/
